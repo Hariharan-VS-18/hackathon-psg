@@ -5,8 +5,10 @@ import "./App.css";
 const examples = {
   headline: "Get 30% Off Your First Order",
   description: "Shop today and save 30% on your first purchase.",
-  landing:
-    "Welcome to our store! Discover our latest collection of everyday essentials. New customers can enjoy free shipping on eligible orders. Browse our products and find something you love.",
+  
+landing:
+  "Get 30% off your first order. Shop today and save 30% on your first purchase. New customers can enjoy free shipping on eligible orders. Browse our products and find something you love.",
+
 };
 
 function App() {
@@ -22,68 +24,69 @@ function App() {
     setResult(null);
   }
 
-  function analyze() {
+  
+  async function analyze() {
     if (!headline.trim() || !landing.trim()) {
       alert("Please enter an ad headline and landing-page text.");
       return;
     }
 
-    const adText = `${headline} ${description}`.toLowerCase();
-    const pageText = landing.toLowerCase();
-    const issues = [];
-
-    const discount = adText.match(/\b\d+\s*%\s*off\b/i);
-    const shippingClaim = /free shipping|free delivery/i.test(adText);
-    const firstOrder = /first order|first purchase|new customer/i.test(adText);
-
-    if (discount && !pageText.includes(discount[0].toLowerCase())) {
-      issues.push({
-        severity: "High",
-        title: "Discount not found in supplied text",
-        evidence: `Ad promise: "${discount[0]}"`,
-        detail:
-          "The provided landing-page text does not contain this discount wording. Check the full page and offer terms before confirming a mismatch.",
-        fix: "Display the advertised discount and its eligibility terms clearly.",
+    try {
+      const response = await fetch("http://127.0.0.1:8000/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ad_text: `${headline}\n${description}`.trim(),
+          landing_page_text: landing,
+        }),
       });
-    }
 
-    if (
-      shippingClaim &&
-      !/free shipping|free delivery/i.test(pageText)
-    ) {
-      issues.push({
-        severity: "Medium",
-        title: "Shipping promise needs verification",
-        evidence: "The ad mentions free shipping or delivery.",
-        detail:
-          "The supplied page text does not mention the same shipping benefit.",
-        fix: "Make the shipping offer and any restrictions easy to find.",
+      if (!response.ok) {
+        throw new Error(`Backend returned HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      
+const issues = (data.findings ?? [])
+  .filter((finding) => finding.status !== "supported")
+  .map((finding) => ({
+    severity: finding.severity ?? "Medium",
+    title: finding.claim ?? "Claim to review",
+    evidence: finding.evidence_quote ?? "",
+    detail:
+      finding.explanation ??
+      "Review this claim against the landing-page content.",
+    
+fix:
+  finding.recommended_fix ??
+  (finding.status === "contradicted"
+    ? "Review the conflicting claim and correct the ad or landing-page content."
+    : finding.status === "missing_support"
+    ? "Add clear evidence for this advertised claim to the landing page."
+    : "Verify this claim manually before making a decision."),
+
+  }));
+
+
+      setResult({
+        score: data.score ?? null,
+        issues,
+        note:
+          data.score_status === "unavailable"
+            ? "A match score is unavailable because the destination page could not be assessed."
+            : "Backend analysis completed. Verify findings against the full landing page.",
       });
+    } catch (error) {
+      console.error("Analysis failed:", error);
+      alert(
+        `Could not analyze the page: ${error.message}\n\nCheck that the backend is running and allows requests from localhost:5173.`
+      );
     }
-
-    if (
-      firstOrder &&
-      !/first order|first purchase|new customer/i.test(pageText)
-    ) {
-      issues.push({
-        severity: "Medium",
-        title: "New-customer offer needs verification",
-        evidence: "The ad targets a first order or new customer.",
-        detail:
-          "The supplied page text does not clearly explain the new-customer offer.",
-        fix: "Explain who qualifies and how the offer can be redeemed.",
-      });
-    }
-
-    const score = Math.max(40, 100 - issues.length * 20);
-
-    setResult({
-      score,
-      issues,
-      note:
-        "Prototype analysis uses simple text matching. Missing wording is not proof that an offer is false. Review the full page before making a final decision.",
-    });
   }
+
 
   const issueCount = result?.issues.length ?? 0;
 
@@ -217,14 +220,14 @@ function App() {
                 <div className="eyebrow">ANALYSIS REPORT</div>
                 <h2>Message match results</h2>
               </div>
-              <span className="demo-badge">Prototype · Rule-based</span>
+              <span className="demo-badge">Backend Analysis</span>
             </div>
 
             <div className="metrics">
               <div className="metric-card">
                 <span>Match indicator</span>
                 <strong>{result.score}<small>/100</small></strong>
-                <p>Illustrative rule-based score</p>
+                <p>Heuristic message-match score</p>
               </div>
               <div className="metric-card">
                 <span>Potential issues</span>
