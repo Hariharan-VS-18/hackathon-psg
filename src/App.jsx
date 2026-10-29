@@ -1,14 +1,11 @@
-
 import { useState } from "react";
 import "./App.css";
 
 const examples = {
   headline: "Get 30% Off Your First Order",
   description: "Shop today and save 30% on your first purchase.",
-  
-landing:
-  "Get 30% off your first order. Shop today and save 30% on your first purchase. New customers can enjoy free shipping on eligible orders. Browse our products and find something you love.",
-
+  landing:
+    "Get 30% off your first order. Shop today and save 30% on your first purchase. New customers can enjoy free shipping on eligible orders. Browse our products and find something you love.",
 };
 
 function App() {
@@ -16,6 +13,7 @@ function App() {
   const [description, setDescription] = useState("");
   const [landing, setLanding] = useState("");
   const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   function loadExample() {
     setHeadline(examples.headline);
@@ -24,13 +22,20 @@ function App() {
     setResult(null);
   }
 
-  
+  function clearForm() {
+    setHeadline("");
+    setDescription("");
+    setLanding("");
+    setResult(null);
+  }
+
   async function analyze() {
     if (!headline.trim() || !landing.trim()) {
       alert("Please enter an ad headline and landing-page text.");
       return;
     }
 
+    setLoading(true);
     try {
       const response = await fetch("http://127.0.0.1:8000/analyze", {
         method: "POST",
@@ -49,30 +54,26 @@ function App() {
 
       const data = await response.json();
 
-      
-const issues = (data.findings ?? [])
-  .filter((finding) => finding.status !== "supported")
-  .map((finding) => ({
-    severity: finding.severity ?? "Medium",
-    title: finding.claim ?? "Claim to review",
-    evidence: finding.evidence_quote ?? "",
-    detail:
-      finding.explanation ??
-      "Review this claim against the landing-page content.",
-    
-fix:
-  finding.recommended_fix ??
-  (finding.status === "contradicted"
-    ? "Review the conflicting claim and correct the ad or landing-page content."
-    : finding.status === "missing_support"
-    ? "Add clear evidence for this advertised claim to the landing page."
-    : "Verify this claim manually before making a decision."),
-
-  }));
-
+      const issues = (data.findings ?? [])
+        .filter((finding) => finding.status !== "supported")
+        .map((finding) => ({
+          severity: finding.severity ?? "Medium",
+          title: finding.claim ?? "Claim to review",
+          evidence: finding.evidence_quote ?? "",
+          detail:
+            finding.explanation ??
+            "Review this claim against the landing-page content.",
+          fix:
+            finding.recommended_fix ??
+            (finding.status === "contradicted"
+              ? "Review the conflicting claim and correct the ad or landing-page content."
+              : finding.status === "missing_support"
+              ? "Add clear evidence for this advertised claim to the landing page."
+              : "Verify this claim manually before making a decision."),
+        }));
 
       setResult({
-        score: data.score ?? null,
+        score: data.score ?? 0,
         issues,
         note:
           data.score_status === "unavailable"
@@ -82,13 +83,20 @@ fix:
     } catch (error) {
       console.error("Analysis failed:", error);
       alert(
-        `Could not analyze the page: ${error.message}\n\nCheck that the backend is running and allows requests from localhost:5173.`
+        `Could not analyze the page: ${error.message}\n\nCheck that the backend server is running.`
       );
+    } finally {
+      setLoading(false);
     }
   }
 
-
   const issueCount = result?.issues.length ?? 0;
+
+  const getScoreColor = (score) => {
+    if (score >= 80) return "score-high";
+    if (score >= 50) return "score-medium";
+    return "score-low";
+  };
 
   return (
     <div className="app-shell">
@@ -100,11 +108,6 @@ fix:
             <span>AI AUDITOR</span>
           </div>
         </div>
-
-        <div className="nav-label">WORKSPACE</div>
-        <div className="nav-item active">▦ &nbsp; Dashboard</div>
-        <div className="nav-item">⌕ &nbsp; Message Auditor</div>
-        <div className="nav-item">▤ &nbsp; Reports</div>
 
         <div className="sidebar-bottom">
           <div className="status-dot" />
@@ -119,10 +122,7 @@ fix:
             <span className="breadcrumb">Workspace / </span>
             <strong>Message Auditor</strong>
           </div>
-          <div className="profile">
-            <div className="avatar">MP</div>
-            <span>Demo workspace</span>
-          </div>
+          
         </header>
 
         <section className="page-heading">
@@ -130,21 +130,32 @@ fix:
             <div className="eyebrow">CAMPAIGN INTELLIGENCE</div>
             <h1>Ad Message Match Auditor</h1>
             <p>
-              Check whether your landing page supports the promises made
-              in your advertisement.
+              Check whether your landing page supports the promises made in
+              your advertisement.
             </p>
           </div>
-          <button className="secondary-button" onClick={loadExample}>
-            Load example
-          </button>
+          <div className="action-buttons">
+            <button className="secondary-button" onClick={loadExample}>
+              Load example
+            </button>
+            <button className="secondary-button clear-btn" onClick={clearForm}>
+              Clear
+            </button>
+          </div>
         </section>
 
         <div className="workflow">
-          <div className="step active-step"><span>1</span> Add content</div>
+          <div className="step active-step">
+            <span>1</span> Add content
+          </div>
           <div className="step-line" />
-          <div className="step"><span>2</span> Analyze match</div>
+          <div className="step">
+            <span>2</span> Analyze match
+          </div>
           <div className="step-line" />
-          <div className="step"><span>3</span> Review findings</div>
+          <div className="step">
+            <span>3</span> Review findings
+          </div>
         </div>
 
         <section className="input-grid">
@@ -208,8 +219,18 @@ fix:
           <div className="privacy-note">
             <span>ⓘ</span> Analyze the content provided for this demo.
           </div>
-          <button className="analyze-button" onClick={analyze}>
-            ✦ &nbsp; Analyze message match <span>→</span>
+          <button
+            className="analyze-button"
+            onClick={analyze}
+            disabled={loading}
+          >
+            {loading ? (
+              "✦ Analyzing..."
+            ) : (
+              <>
+                ✦ &nbsp; Analyze message match <span>→</span>
+              </>
+            )}
           </button>
         </div>
 
@@ -226,7 +247,10 @@ fix:
             <div className="metrics">
               <div className="metric-card">
                 <span>Match indicator</span>
-                <strong>{result.score}<small>/100</small></strong>
+                <strong className={getScoreColor(result.score)}>
+                  {result.score}
+                  <small>/100</small>
+                </strong>
                 <p>Heuristic message-match score</p>
               </div>
               <div className="metric-card">
@@ -236,8 +260,12 @@ fix:
               </div>
               <div className="metric-card">
                 <span>Review status</span>
-                <strong className="review-status">
-                  {issueCount ? "Review" : "Check"}
+                <strong
+                  className={
+                    issueCount ? "review-status warning" : "review-status success"
+                  }
+                >
+                  {issueCount ? "Needs Review" : "Passed"}
                 </strong>
                 <p>Human verification recommended</p>
               </div>
@@ -260,12 +288,16 @@ fix:
                 result.issues.map((issue, index) => (
                   <article className="finding" key={index}>
                     <div className="finding-top">
-                      <span className={`severity ${issue.severity.toLowerCase()}`}>
+                      <span
+                        className={`severity ${issue.severity.toLowerCase()}`}
+                      >
                         {issue.severity}
                       </span>
                       <strong>{issue.title}</strong>
                     </div>
-                    <p className="evidence">{issue.evidence}</p>
+                    {issue.evidence && (
+                      <p className="evidence">"{issue.evidence}"</p>
+                    )}
                     <p>{issue.detail}</p>
                     <div className="recommendation">
                       <strong>Suggested fix</strong>

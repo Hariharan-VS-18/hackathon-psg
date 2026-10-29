@@ -124,12 +124,14 @@ def analyze_claim(claim: str, page_sentences: list[str]) -> dict:
             "recommended_fix": "Review this claim manually.",
         }
 
+    # Extract numbers/percentages (e.g., "50%", "30%", "100") from the claim
+    claim_numbers = set(re.findall(r"\b\d+%\b|\b\d+\b", claim.lower()))
+
     best_sentence = None
     best_overlap = 0.0
 
     for sentence in page_sentences:
         page_words = words(sentence)
-
         if not page_words:
             continue
 
@@ -139,20 +141,31 @@ def analyze_claim(claim: str, page_sentences: list[str]) -> dict:
             best_overlap = overlap
             best_sentence = sentence
 
-    if best_sentence and best_overlap >= 0.60:
-        if explicit_contradiction(claim, best_sentence):
+    if best_sentence and best_overlap >= 0.50:
+        sentence_numbers = set(re.findall(r"\b\d+%\b|\b\d+\b", best_sentence.lower()))
+
+        # Check for numeric/offer mismatch (e.g., 50% in ad vs 30% on page)
+        if claim_numbers and not claim_numbers.issubset(sentence_numbers):
             return {
                 "claim": claim,
                 "status": "contradicted",
                 "severity": "high",
                 "evidence_quote": best_sentence,
                 "explanation": (
-                    "Potential conflicting language found. "
-                    "Manual review is required."
+                    f"Offer mismatch detected! Ad mentions numbers/offers ({', '.join(claim_numbers)}) "
+                    f"that do not match the page content."
                 ),
-                "recommended_fix": (
-                    "Align the ad promise with the actual offer."
-                ),
+                "recommended_fix": "Align the discount rate or numbers in your ad with the landing page offer.",
+            }
+
+        if explicit_contradiction(claim, best_sentence):
+            return {
+                "claim": claim,
+                "status": "contradicted",
+                "severity": "high",
+                "evidence_quote": best_sentence,
+                "explanation": "Potential conflicting language found. Manual review is required.",
+                "recommended_fix": "Align the ad promise with the actual offer.",
             }
 
         return {
@@ -160,21 +173,13 @@ def analyze_claim(claim: str, page_sentences: list[str]) -> dict:
             "status": "supported",
             "severity": "low",
             "evidence_quote": best_sentence,
-            "explanation": (
-                "Similar terms were found on the page; "
-                "this does not guarantee semantic support."
-            ),
-            "recommended_fix": (
-                "Keep the ad and landing page consistent."
-            ),
+            "explanation": "Similar terms and matching offers were found on the page.",
+            "recommended_fix": "Keep the ad and landing page consistent.",
         }
 
     high_risk = any(
         term in claim.lower()
-        for term in (
-            "guarantee", "guaranteed", "free",
-            "same-day", "same day", "100%",
-        )
+        for term in ("guarantee", "guaranteed", "free", "same-day", "same day", "100%")
     )
 
     return {
@@ -182,13 +187,8 @@ def analyze_claim(claim: str, page_sentences: list[str]) -> dict:
         "status": "missing_support",
         "severity": "high" if high_risk else "medium",
         "evidence_quote": None,
-        "explanation": (
-            "No sufficiently similar supporting statement was found. "
-            "This does not prove the claim is false."
-        ),
-        "recommended_fix": (
-            "Substantiate the claim on the page or revise the ad."
-        ),
+        "explanation": "No matching supporting statement or offer was found on the page.",
+        "recommended_fix": "Substantiate the claim on the page or revise the ad.",
     }
 
 
